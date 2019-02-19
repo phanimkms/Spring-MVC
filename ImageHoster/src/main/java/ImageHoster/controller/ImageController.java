@@ -1,8 +1,11 @@
 package ImageHoster.controller;
 
+
+import ImageHoster.model.Comment;
 import ImageHoster.model.Image;
 import ImageHoster.model.Tag;
 import ImageHoster.model.User;
+import ImageHoster.service.CommentService;
 import ImageHoster.service.ImageService;
 import ImageHoster.service.TagService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +29,9 @@ public class ImageController {
 
     @Autowired
     private TagService tagService;
+    @Autowired
+    private CommentService commentService;
+
 
     //This method displays all the images in the user home page after successful login
     @RequestMapping("images")
@@ -45,9 +51,11 @@ public class ImageController {
     //Also now you need to add the tags of an image in the Model type object
     //Here a list of tags is added in the Model type object
     //this list is then sent to 'images/image.html' file and the tags are displayed
-    @RequestMapping("/images/{title}")
-    public String showImage(@PathVariable("title") String title, Model model) {
-        Image image = imageService.getImageByTitle(title);
+    @RequestMapping("/images/{imageId}/{title}")//An image's URL includes its unique identifier imageId
+    public String showImage(@PathVariable("imageId") Integer imageId, Model model) {
+        Image image = imageService.getImage(imageId);//we retrieve an image by it's imageId rather than by title
+        List<Comment> comments=commentService.getAllCommentsByImageId(imageId);
+        model.addAttribute("comments",comments);
         model.addAttribute("image", image);
         model.addAttribute("tags", image.getTags());
         return "images/image";
@@ -92,13 +100,26 @@ public class ImageController {
     //The method first needs to convert the list of all the tags to a string containing all the tags separated by a comma and then add this string in a Model type object
     //This string is then displayed by 'edit.html' file as previous tags of an image
     @RequestMapping(value = "/editImage")
-    public String editImage(@RequestParam("imageId") Integer imageId, Model model) {
+    public String editImage(@RequestParam("imageId") Integer imageId, Model model,HttpSession session) {
         Image image = imageService.getImage(imageId);
+        List<Comment> comments=commentService.getAllCommentsByImageId(imageId);
+
+        User user=(User)session.getAttribute("loggeduser");
+        String error = "Only the owner of the image can edit the image";
 
         String tags = convertTagsToString(image.getTags());
+        model.addAttribute("comments",comments);
         model.addAttribute("image", image);
         model.addAttribute("tags", tags);
-        return "images/edit";
+        model.addAttribute("editError",error);
+
+        if(!user.getId().equals(image.getUser().getId())) {
+            return "images/image";
+        }
+        else{
+            return "images/edit";
+        }
+
     }
 
     //This controller method is called when the request pattern is of type 'images/edit' and also the incoming request is of PUT type
@@ -132,7 +153,7 @@ public class ImageController {
         updatedImage.setDate(new Date());
 
         imageService.updateImage(updatedImage);
-        return "redirect:/images/" + updatedImage.getTitle();
+        return "images/image" ;
     }
 
 
@@ -140,9 +161,24 @@ public class ImageController {
     //The method calls the deleteImage() method in the business logic passing the id of the image to be deleted
     //Looks for a controller method with request mapping of type '/images'
     @RequestMapping(value = "/deleteImage", method = RequestMethod.DELETE)
-    public String deleteImageSubmit(@RequestParam(name = "imageId") Integer imageId) {
-        imageService.deleteImage(imageId);
-        return "redirect:/images";
+    public String deleteImageSubmit(@RequestParam(name = "imageId") Integer imageId,Model model,HttpSession session) {
+
+        Image image = imageService.getImage(imageId);
+        User user=(User)session.getAttribute("loggeduser");
+        String error = "Only the owner of the image can delete the image";
+
+        model.addAttribute("image",image);
+        model.addAttribute("deleteError", error);
+        model.addAttribute("user",user);
+
+        if(!user.getId().equals(image.getUser().getId())) {
+            return "images/image";
+        }
+        else{
+
+            imageService.deleteImage(imageId);
+            return "redirect:/images/";
+        }
     }
 
 
